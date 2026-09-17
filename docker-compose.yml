@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: skyhelp-postgres
+    environment:
+      POSTGRES_DB: SkyHelp
+      POSTGRES_USER: skyhelp
+      POSTGRES_PASSWORD: skyhelp
+    ports:
+      - "5432:5432"
+    volumes:
+      - skyhelp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyhelp -d SkyHelp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: skyhelp-api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      PORT: 8080
+      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=SkyHelp;Username=skyhelp;Password=skyhelp
+      Jwt__Key: local-docker-dev-key-change-me-32ch
+      Jwt__Issuer: SkyHelp
+      Jwt__Audience: SkyHelp
+      Swagger__Enabled: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  skyhelp_pgdata:

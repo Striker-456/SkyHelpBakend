@@ -20,11 +20,11 @@ namespace SkyHelp.Repositories
 
             if (!string.IsNullOrWhiteSpace(usuario))
             {
-                var texto = usuario.Trim();
+                var texto = $"%{usuario.Trim()}%";
                 query = query.Where(a =>
-                    (a.Usuario != null && a.Usuario.NombreCompleto.Contains(texto)) ||
-                    (a.Usuario != null && a.Usuario.Correo.Contains(texto)) ||
-                    a.Descripcion.Contains(texto));
+                    (a.Usuario != null && EF.Functions.ILike(a.Usuario.NombreCompleto, texto)) ||
+                    (a.Usuario != null && EF.Functions.ILike(a.Usuario.Correo, texto)) ||
+                    EF.Functions.ILike(a.Descripcion, texto));
             }
             if (!string.IsNullOrWhiteSpace(accion))
                 query = query.Where(a => a.TipoEvento == accion);

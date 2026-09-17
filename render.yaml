@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: skyhelp-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__PostgreSQL
+        sync: false
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: SkyHelp
+      - key: Jwt__Audience
+        value: SkyHelp
+      - key: Cors__AllowedOrigins
+        sync: false
+      - key: Swagger__Enabled
+        value: "true"

@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using SkyHelp.Context;
 using Microsoft.OpenApi.Models;
-using System.Security.Cryptography.Xml;
 using System.Text;
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -57,17 +57,30 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 });
+var extraOrigins = builder.Configuration["Cors:AllowedOrigins"]
+    ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? Array.Empty<string>();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddCors(options =>
 {
-    // Restringido a localhost (cualquier puerto, para desarrollo) y *.devtunnels.ms
-    // (túneles de desarrollo). Antes era AllowAnyOrigin(), lo cual no tiene sentido
-    // ya que el mismo backend sirve el frontend desde su propio origen.
+    // Localhost, túneles de desarrollo, *.onrender.com y orígenes extra en Cors:AllowedOrigins.
     options.AddPolicy("AllowSpecificOrigin",
         corsBuilder => corsBuilder
             .SetIsOriginAllowed(origin =>
             {
                 if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
-                return uri.IsLoopback || uri.Host.EndsWith(".devtunnels.ms", StringComparison.OrdinalIgnoreCase);
+                if (uri.IsLoopback || uri.Host.EndsWith(".devtunnels.ms", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (uri.Host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                return extraOrigins.Any(allowed => string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase));
             })
             .AllowAnyMethod()
             .AllowAnyHeader());
@@ -123,14 +136,27 @@ builder.Services.AddAuthentication(x =>
 
 var app = builder.Build();
 
-// Aplica migraciones pendientes al arrancar. Necesario para contenedores (docker-compose): un
-// PostgreSQL recién levantado no tiene la base SkyHelp ni sus tablas hasta que algo las crea, y
-// aquí no hay un paso separado que corra `dotnet ef database update`. Migrate() es seguro de
-// llamar siempre: no hace nada si ya está al día.
+// Aplica migraciones pendientes (esquema + seed de roles/estados/admin) al arrancar. Necesario
+// para contenedores: un PostgreSQL recién levantado no tiene la base SkyHelp ni sus tablas
+// hasta que algo las crea. Migrate() es seguro de llamar siempre: no hace nada si ya está al día.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SkyHelp.Context.SkyHelpContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    const int maxAttempts = 10;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            db.Database.Migrate();
+            break;
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            logger.LogWarning(ex, "PostgreSQL no está listo (intento {Attempt}/{Max}). Reintentando...", attempt, maxAttempts);
+            Thread.Sleep(TimeSpan.FromSeconds(2));
+        }
+    }
 }
 
 // Red de seguridad: cualquier excepción no controlada por un try/catch local
@@ -155,13 +181,20 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-if (app.Environment.IsDevelopment())
+app.UseForwardedHeaders();
+
+var swaggerEnabled = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue("Swagger:Enabled", false);
+if (swaggerEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowSpecificOrigin");
 
@@ -192,6 +225,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 // Servir el frontend DESPUÉS de los controladores API
 var frontendPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Frontend"));

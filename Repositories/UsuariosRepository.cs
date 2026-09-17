@@ -24,7 +24,8 @@ namespace SkyHelp.Repositories
 
         public async Task<Usuarios> ObtenerUsuarioPorCorreo(string Correo)
         {
-            return await _context.Usuarios.FirstOrDefaultAsync(x => x.Correo == Correo);
+            var correo = Correo.Trim().ToLower();
+            return await _context.Usuarios.FirstOrDefaultAsync(x => x.Correo.ToLower() == correo);
         }
 
         public async Task<List<Usuarios>> ObtenerUsuarios()
@@ -114,7 +115,7 @@ namespace SkyHelp.Repositories
                 usuarioExistente.NombreUsuarios = usuario.NombreUsuarios;
                 usuarioExistente.IdRol = usuario.IdRol;
                 usuarioExistente.NombreCompleto = usuario.NombreCompleto;
-                usuarioExistente.Correo = usuario.Correo;
+                usuarioExistente.Correo = usuario.Correo.Trim().ToLowerInvariant();
                 usuarioExistente.EstadoCuenta = usuario.EstadoCuenta;
                 usuarioExistente.Telefono = usuario.Telefono;
 
@@ -139,6 +140,7 @@ namespace SkyHelp.Repositories
             try
             {
                 usuario.Contrasena = Seguridad.Hashear(usuario.Contrasena);
+                usuario.Correo = usuario.Correo.Trim().ToLowerInvariant();
 
                 if (usuario.IdUsuario == Guid.Empty)
                 {

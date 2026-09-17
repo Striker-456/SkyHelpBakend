@@ -40,10 +40,17 @@ namespace SkyHelp.Context
 
 
 
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+            configurationBuilder.Properties<DateTime?>().HaveConversion<UtcNullableDateTimeConverter>();
+            base.ConfigureConventions(configurationBuilder);
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // ================================================================================
-            // Estrategia general de DeleteBehavior (evita "multiple cascade paths" en SQL Server
+            // Estrategia general de DeleteBehavior (evita ciclos / múltiples rutas de cascada
             // y sigue la lógica de negocio ya implementada en los repositorios):
             //
             //  - Roles y EstadosTickets son tablas de referencia/lookup: NUNCA deben poder arrastrar
@@ -205,7 +212,7 @@ namespace SkyHelp.Context
                 entity.Property(e => e.IdDomiciliario).IsRequired();
                 // RELACIÓN: Usuarios -> Pedidos (cliente). Restrict: preserva el historial de pedidos
                 // del cliente y evita la doble ruta de cascada hacia Pedidos (Usuario->Pedido y
-                // Usuario->Domiciliario->Pedido) que producía el error original de SQL Server.
+                // Usuario->Domiciliario->Pedido) que producía el error original de múltiples rutas de cascada.
                 entity.HasOne(e => e.Usuario)
                       .WithMany(t => t.Pedidos)
                       .HasForeignKey(e => e.IdUsuario)
@@ -333,7 +340,7 @@ namespace SkyHelp.Context
                 // RELACIÓN: ProgresoTickets -> Tecnicos (opcional; nulo si lo registró un Administrador).
                 // ClientSetNull, no SetNull real: Usuarios->Tecnicos ya es Cascade, así que un SetNull
                 // real aquí sumado a Usuarios->Tickets->ProgresoTickets (también Cascade) volvería a
-                // producir dos rutas de cascada hacia ProgresoTickets (el mismo error de SQL Server
+                // producir dos rutas de cascada hacia ProgresoTickets (el mismo error de
                 // "may cause cycles or multiple cascade paths" que se corrigió para Domiciliarios/
                 // Tecnicos -> Tickets).
                 entity.HasOne(e => e.Tecnico)

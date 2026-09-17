@@ -3,7 +3,6 @@ using SkyHelp.Repositories;
 using SkyHelp.Repositories.Interfaces;
 using SkyHelp.Services;
 using SkyHelp.Services.Interfaces;
-using System.Net.Security;
 
 namespace SkyHelp.Context
 {
@@ -11,13 +10,19 @@ namespace SkyHelp.Context
     {
         public static IServiceCollection AddExternal(this IServiceCollection services, IConfiguration _Configuration)// Método de extensión para agregar dependencias externas
         {
-            String connectionString = "";
-            connectionString = _Configuration["ConnectionStrings:SQL"];// Obtener la cadena de conexión desde la configuración
+            var connectionString = _Configuration.GetConnectionString("PostgreSQL")
+                ?? _Configuration.GetConnectionString("SQL");
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException(
+                    "Falta la cadena de conexión de PostgreSQL. En desarrollo usa 'dotnet user-secrets set \"ConnectionStrings:PostgreSQL\" \"Host=localhost;Port=5432;Database=SkyHelp;Username=skyhelp;Password=skyhelp\"' o la clave ConnectionStrings:PostgreSQL en appsettings.Development.json. En Docker/producción usa ConnectionStrings__PostgreSQL.");
+            }
 
             services.AddDbContext<SkyHelpContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
                     npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)
-                ));// Configurar el contexto de la base de datos con PostgreSQL
+                ));
             services.AddScoped<IUsuariosRepository, UsuariosRepository>();// Inyección de dependencia del repositorio de usuarios
             services.AddScoped<IRolRepository, RolRepository>();// Inyección de dependencia del repositorio de roles
             services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();//Inyección de dependencia del repositorio de auditoría
