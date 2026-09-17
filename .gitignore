@@ -2,4 +2,7 @@ bin/
 obj/
 .vs/
 .env
+.aiven.env
+.env.*
+!.env.example
 *.user
